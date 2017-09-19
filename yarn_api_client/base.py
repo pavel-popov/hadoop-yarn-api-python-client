@@ -1,57 +1,42 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
-try:
-    from httplib import HTTPConnection, OK
-except ImportError:
-    from http.client import HTTPConnection, OK
-import json
+import os
 import logging
-try:
-    from urllib import urlencode
-except ImportError:
-    from urllib.parse import urlencode
+import requests
 
-from .errors import APIError, ConfigurationError
+from requests_kerberos import HTTPKerberosAuth
+
+from .errors import APIError
+
+
+# if this variable is not None then Kerberos authentication will be used
+KRB = os.getenv('KRB5_REALM', None)
 
 
 class Response(object):
-    def __init__(self, http_response):
-        self.data = json.load(http_response)
+    def __init__(self, json):
+        self.data = json
 
 
 class BaseYarnAPI(object):
     response_class = Response
 
     def request(self, api_path, **query_args):
-        params = urlencode(query_args)
-        if params:
-            path = api_path + '?' + params
-        else:
-            path = api_path
-
-        self.logger.info('Request http://%s:%s%s', self.address, self.port, path)
+        self.logger.info('Request http://%s:%s%s', self.address, self.port, api_path)
         
-        http_conn = self.http_conn
-        http_conn.request('GET', path)
-        response = http_conn.getresponse()
-
-        if response.status == OK:
-            return self.response_class(response)
+        auth = None if KRB is None else HTTPKerberosAuth()
+        url = "http://{host}:{port}{path}".format(host=self.address, port=self.port, path=api_path)
+        r = requests.get(url, params=query_args, auth=auth)
+        
+        if r.status_code == 200:
+            return self.response_class(r.json())
         else:
-            msg = 'Response finished with status: %s' % response.status
+            msg = 'Response finished with status: %s' % r.status_code
             raise APIError(msg)
 
     def construct_parameters(self, arguments):
         params = dict((key, value) for key, value in arguments if value is not None)
         return params
-
-    @property
-    def http_conn(self):
-        if self.address is None:
-            raise ConfigurationError('API address is not set')
-        elif self.port is None:
-            raise ConfigurationError('API port is not set')
-        return HTTPConnection(self.address, self.port, timeout=self.timeout)
 
     __logger = None
     @property

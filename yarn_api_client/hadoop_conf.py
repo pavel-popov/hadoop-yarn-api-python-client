@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 import os
 import xml.etree.ElementTree as ET
-try:
-    from httplib import HTTPConnection, OK
-except ImportError:
-    from http.client import HTTPConnection, OK
+import requests
+from requests_kerberos import HTTPKerberosAuth
 
-CONF_DIR = '/etc/hadoop/conf'
+from .base import KRB
+
+CONF_DIR = os.getenv('HADOOP_CONF_DIR', '/etc/hadoop/conf')
 
 
 def _get_rm_ids(hadoop_conf_path):
@@ -24,22 +24,18 @@ def _get_resource_manager(hadoop_conf_path, rm_id = None):
         rm_webapp_address = parse(os.path.join(hadoop_conf_path, 'yarn-site.xml'), prop_name)
     if rm_webapp_address is not None:
         [host, port] = rm_webapp_address.split(':')
-        return (host, port)
+        return host, port
     else:
         return None
 
 
 def _check_is_active_rm(rm_web_host, rm_web_port):
-    conn = HTTPConnection(rm_web_host, rm_web_port)
-    try:
-        conn.request('GET', '/cluster')
-    except:
-        return False
-    response = conn.getresponse()
-    if response.status != OK:
+    r = requests.get('http://{}:{}/cluster'.format(rm_web_host, rm_web_port),
+                     auth=None if KRB is None else HTTPKerberosAuth())
+    if r.status_code != 200:
         return False
     else:
-        if response.getheader('Refresh', None) is not None:
+        if r.headers.get('Refresh', None) is not None:
             return False
         return True
 

@@ -64,7 +64,7 @@ class ResourceManager(BaseYarnAPI):
         path = '/ws/v1/cluster/scheduler'
         return self.request(path)
 
-    def cluster_applications(self, state=None, final_status=None,
+    def cluster_applications(self, states=(), final_status=None,
                              user=None, queue=None, limit=None,
                              started_time_begin=None, started_time_end=None,
                              finished_time_begin=None, finished_time_end=None):
@@ -72,7 +72,7 @@ class ResourceManager(BaseYarnAPI):
         With the Applications API, you can obtain a collection of resources,
         each of which represents an application.
 
-        :param str state: state of the application
+        :param iterable of str states: states of the application
         :param str final_status: the final status of the
             application - reported by the application itself
         :param str user: user name
@@ -94,9 +94,10 @@ class ResourceManager(BaseYarnAPI):
         path = '/ws/v1/cluster/apps'
 
         legal_states = set([s for s, _ in YarnApplicationState])
-        if state is not None and state not in legal_states:
-            msg = 'Yarn Application State %s is illegal' % (state,)
-            raise IllegalArgumentError(msg)
+        for state in states:
+            if state not in legal_states:
+                msg = 'Yarn Application State %s is illegal' % (state,)
+                raise IllegalArgumentError(msg)
 
         legal_final_statuses = set([s for s, _ in FinalApplicationStatus])
         if final_status is not None and final_status not in legal_final_statuses:
@@ -104,7 +105,7 @@ class ResourceManager(BaseYarnAPI):
             raise IllegalArgumentError(msg)
 
         loc_args = (
-            ('state', state),
+            ('states', ','.join(states)),
             ('finalStatus', final_status),
             ('user', user),
             ('queue', queue),
